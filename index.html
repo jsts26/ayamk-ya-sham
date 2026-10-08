@@ -154,15 +154,17 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./assets/js/supabase.js"></script>
 <script>
 /* ========= إعدادات سهلة التعديل =========
    CURRENCY: اكتب العملة هنا (مثال: "ل.س") أو اتركها فارغة.
    السعر null يعني "السعر عند الطلب". */
-const CURRENCY = "ج.س";
+let CURRENCY = "ج.س";
 /* رقم واتساب المطعم بالصيغة الدولية بدون + */
-const WHATSAPP = "249910087933";
+let WHATSAPP = "249910087933";
 
-const MENU = [
+let MENU = [
   { id: "sand", title: "السندويتشات", icon: "🌯", groups: [
     { name: "الشاورما", items: [
       ["شاورما عادي", 15000], ["شاورما جامبو", 19000], ["شاورما صاروخ", 27000],
@@ -220,11 +222,15 @@ const norm = s => s.toLowerCase()
   .replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").trim();
 
 /* فهرس الأصناف */
-const ITEMS = {};
-MENU.forEach((s, si) => s.groups.forEach((g, gi) => g.items.forEach((it, ii) => {
-  if (Array.isArray(it[1])) it[1].forEach((p, k) => { ITEMS[`${si}-${gi}-${ii}-${k}`] = { n: `${it[0]} – ${SIZES[k]}`, p }; });
-  else ITEMS[`${si}-${gi}-${ii}`] = { n: it[0], p: it[1] };
-})));
+let ITEMS = {};
+function rebuildItemIndex() {
+  ITEMS = {};
+  MENU.forEach((s, si) => s.groups.forEach((g, gi) => g.items.forEach((it, ii) => {
+    if (Array.isArray(it[1])) it[1].forEach((p, k) => { ITEMS[`${si}-${gi}-${ii}-${k}`] = { n: `${it[0]} – ${SIZES[k]}`, p }; });
+    else ITEMS[`${si}-${gi}-${ii}`] = { n: it[0], p: it[1] };
+  })));
+}
+rebuildItemIndex();
 
 const state = { tab: "all", q: "", cart: {} };
 const $ = id => document.getElementById(id);
@@ -335,7 +341,38 @@ $("copy").onclick = copyOrder;
 $("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
 
+async function connectMenuToSupabase() {
+  if (!window.supabaseClient) return;
+  try {
+    const [{data: settings, error: settingsError}, {data: categories, error: categoriesError}, {data: products, error: productsError}] = await Promise.all([
+      supabaseClient.from('restaurant_settings').select('whatsapp,currency,is_open').limit(1).maybeSingle(),
+      supabaseClient.from('categories').select('id,name_ar,sort_order,is_active').eq('is_active', true).order('sort_order'),
+      supabaseClient.from('products').select('id,category_id,name_ar,price,group_name_ar,size_label_ar,sort_order,is_available').eq('is_available', true).order('sort_order')
+    ]);
+    if (settings && !settingsError) { if (settings.whatsapp) WHATSAPP = String(settings.whatsapp).replace(/\D/g, ''); if (settings.currency) CURRENCY = settings.currency; }
+    if (categoriesError || productsError) throw (categoriesError || productsError);
+    // Keep the existing static menu as a safe fallback until the database has products.
+    if (!products || products.length === 0) { renderTabs(); refresh(); return; }
+    const grouped = new Map();
+    for (const c of (categories || [])) grouped.set(c.id, {id:c.id, title:c.name_ar || 'قسم', icon:'🍽️', groups:new Map()});
+    for (const p of products) {
+      const section = grouped.get(p.category_id);
+      if (!section) continue;
+      const groupName = p.group_name_ar || 'الأصناف';
+      if (!section.groups.has(groupName)) section.groups.set(groupName, []);
+      const itemName = p.size_label_ar ? `${p.name_ar} – ${p.size_label_ar}` : p.name_ar;
+      section.groups.get(groupName).push([itemName, p.price == null ? null : Number(p.price)]);
+    }
+    const fromDb = [...grouped.values()].map(s => ({id:s.id,title:s.title,icon:s.icon,groups:[...s.groups.entries()].map(([name,items])=>({name,items}))})).filter(s=>s.groups.some(g=>g.items.length));
+    if (fromDb.length) MENU = fromDb;
+    rebuildItemIndex(); state.tab = 'all'; state.cart = {}; renderTabs(); refresh();
+  } catch (err) {
+    console.warn('Supabase menu load failed; showing bundled menu.', err);
+    renderTabs(); refresh();
+  }
+}
 renderTabs(); refresh();
+connectMenuToSupabase();
 </script>
 </body>
 </html>
