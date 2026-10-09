@@ -1,0 +1,77 @@
+```html
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>تسجيل دخول الموظفين | أيامك يا شام</title>
+
+  <link rel="stylesheet" href="../assets/css/staff.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../assets/js/staff-supabase.js"></script>
+  <script defer src="../assets/js/staff-app.js"></script>
+</head>
+
+<body data-staff-page="login">
+  <main class="staff-shell staff-login">
+    <section class="staff-card">
+      <div class="staff-brand">أيامك يا شام</div>
+      <div class="staff-subtitle">
+        بوابة الموظفين — تسجيل دخول آمن
+      </div>
+
+      <div
+        id="staff-message"
+        class="staff-message hidden"
+        role="status"
+        aria-live="polite">
+      </div>
+
+      <form id="login-form" class="staff-form" style="margin-top:20px">
+        <label class="staff-label">
+          البريد الإلكتروني
+          <input
+            id="email"
+            class="staff-input"
+            type="email"
+            autocomplete="username"
+            required>
+        </label>
+
+        <label class="staff-label">
+          كلمة المرور
+          <input
+            id="password"
+            class="staff-input"
+            type="password"
+            autocomplete="current-password"
+            required>
+        </label>
+
+        <button
+          id="login-submit"
+          class="staff-button"
+          type="submit">
+          تسجيل الدخول
+        </button>
+      </form>
+
+      <div class="staff-actions">
+        <button
+          id="back-to-store"
+          class="staff-button secondary"
+          type="button">
+          العودة إلى المتجر
+        </button>
+      </div>
+
+      <p class="staff-small">
+        لا تملك حسابًا؟ اطلب من المدير إنشاء حساب الموظف وتفعيله.
+      </p>
+    </section>
+  </main>
+</body>
+</html>
+```
