@@ -438,7 +438,7 @@ $("checkoutForm").addEventListener('submit',async e=>{
       p_customer_name:$("customerName").value.trim(),
       p_customer_phone:$("customerPhone").value.trim(),
       p_delivery_address:$("deliveryAddress").value.trim(),
-      p_delivery_zone_id:zone.id,
+      p_delivery_zone_id:zone ? zone.id : null,
       p_payment_method:$("paymentMethod").value,
       p_items:cartItems,
       p_customer_notes:$("customerNotes").value.trim()||null,
