@@ -1,0 +1,23 @@
+-- Security review migration for staff delivery status updates.
+-- IMPORTANT: inspect the existing public.staff_update_order_status(uuid,text,text)
+-- function before applying. The current deployment's function body may contain
+-- additional transition rules; do not replace those rules blindly.
+--
+-- Mandatory authorization condition to add inside staff_update_order_status
+-- immediately after loading/locking the order and resolving the active role:
+--
+-- IF v_role = 'delivery'
+--    AND v_order.assigned_driver_id IS DISTINCT FROM auth.uid() THEN
+--   RAISE EXCEPTION 'You are not assigned to this order';
+-- END IF;
+--
+-- Keep all existing role transition validation and audit logging in the function.
+-- This file is intentionally a review checklist, not an executable CREATE OR
+-- REPLACE FUNCTION, because replacing the RPC without the exact current body
+-- could accidentally remove transition checks or break its return contract.
+--
+-- Validate after editing:
+-- 1) Assigned delivery staff can transition eligible orders.
+-- 2) A different delivery staff member is rejected even if they call the RPC directly.
+-- 3) An unassigned delivery staff member is rejected.
+-- 4) orders RLS still limits delivery staff to assigned orders.
