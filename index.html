@@ -108,6 +108,11 @@
   a.btn { display: block; text-align: center; text-decoration: none; }
   .btn.wa { background: #25d366; border-color: #25d366; color: #0b2a14; font-weight: 800; font-size: 17px; margin-bottom: 10px; }
   .btn.main { background: var(--mint); border-color: var(--mint); color: #1b1c1e; font-weight: 800; }
+  .checkout { display:grid; gap:10px; margin-top:16px; }
+  .checkout label { display:block; font-size:14px; margin-bottom:5px; }
+  .checkout input,.checkout select,.checkout textarea { width:100%; padding:11px; border:1px solid var(--line); border-radius:10px; background:#202326; color:var(--chalk); font:inherit; }
+  .bankbox { padding:12px; border:1px solid var(--line); border-radius:12px; line-height:1.9; }
+  .statusmsg { white-space:pre-wrap; font-size:14px; }
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--mint); color: #1b1c1e;
            padding: 10px 18px; border-radius: 999px; font-weight: 700; z-index: 60; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .add:active { transform: none; } }
@@ -142,10 +147,23 @@
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="panel">
     <h2 id="sheetTitle">طلبك</h2>
-    <p class="hint">اختر أصنافك لتحسب الإجمالي، ثم أرسل الطلب للمطعم عبر واتساب.</p>
+    <p class="hint">راجع الأصناف، ثم أدخل بيانات التوصيل والدفع لإرسال الطلب.</p>
     <div id="lines"></div>
-    <div class="total"><span>الإجمالي</span><span id="sum"></span></div>
-    <a class="btn wa" id="wa" href="#" target="_blank" rel="noopener">إرسال الطلب عبر واتساب</a>
+    <div class="total"><span>قيمة الأصناف</span><span id="sum"></span></div>
+    <form id="checkoutForm" class="checkout">
+      <label>الاسم الكامل<input id="customerName" required maxlength="120" autocomplete="name"></label>
+      <label>رقم الهاتف<input id="customerPhone" required maxlength="30" autocomplete="tel" inputmode="tel"></label>
+      <label>عنوان التوصيل بالتفصيل<textarea id="deliveryAddress" required maxlength="500" autocomplete="street-address"></textarea></label>
+      <label>منطقة التوصيل<select id="deliveryZone" required><option value="">جارٍ تحميل المناطق…</option></select></label>
+      <div class="total"><span>رسوم التوصيل</span><span id="deliveryFee">—</span></div>
+      <div class="total"><strong>الإجمالي الكلي</strong><strong id="grandTotal">—</strong></div>
+      <label>طريقة الدفع<select id="paymentMethod" required><option value="cash_on_delivery">الدفع نقدًا عند الاستلام</option><option value="bank_transfer">تحويل بنكي</option></select></label>
+      <div id="bankDetails" class="bankbox" hidden>**بيانات التحويل البنكي**<br>بنك الخرطوم<br>اسم صاحب الحساب: عبد الرحمن ثائر بوبكي<br>رقم الحساب: 3120104<br><label>مرجع التحويل (إن توفر)<input id="paymentReference" maxlength="120"></label><small>سيتم مراجعة التحويل يدويًا؛ لا يُعد الطلب مدفوعًا بمجرد إرساله.</small></div>
+      <label>ملاحظات إضافية (اختياري)<textarea id="customerNotes" maxlength="1000"></textarea></label>
+      <button class="btn main" id="submitOrder" type="submit">تأكيد الطلب وحفظه</button>
+      <div id="checkoutMessage" class="statusmsg" role="status"></div>
+    </form>
+    <a class="btn wa" id="wa" href="#" target="_blank" rel="noopener" hidden>إرسال تفاصيل الطلب عبر واتساب</a>
     <div class="btns">
       <button class="btn main" id="copy">نسخ الطلب</button>
       <button class="btn" id="clear">تفريغ</button>
@@ -226,8 +244,8 @@ let ITEMS = {};
 function rebuildItemIndex() {
   ITEMS = {};
   MENU.forEach((s, si) => s.groups.forEach((g, gi) => g.items.forEach((it, ii) => {
-    if (Array.isArray(it[1])) it[1].forEach((p, k) => { ITEMS[`${si}-${gi}-${ii}-${k}`] = { n: `${it[0]} – ${SIZES[k]}`, p }; });
-    else ITEMS[`${si}-${gi}-${ii}`] = { n: it[0], p: it[1] };
+    if (Array.isArray(it[1])) it[1].forEach((p, k) => { ITEMS[`${si}-${gi}-${ii}-${k}`] = { n: `${it[0]} – ${SIZES[k]}`, p, product_id: it[2] || null }; });
+    else ITEMS[`${si}-${gi}-${ii}`] = { n: it[0], p: it[1], product_id: it[2] || null };
   })));
 }
 rebuildItemIndex();
@@ -293,7 +311,7 @@ function renderSheet() {
     `<div class="step"><button data-act="dec" data-key="${k}" aria-label="إنقاص">−</button><b>${q}</b><button data-act="inc" data-key="${k}" aria-label="زيادة">+</button></div>` +
     `<span class="lt">${fmt(ITEMS[k].p * q)}</span></div>`).join("");
   $("sum").textContent = fmt(total());
-  $("wa").href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(orderText())}`;
+  updateCheckoutTotals();
   if (!e.length) closeSheet();
 }
 function refresh() { renderMenu(); renderBar(); if (!$("sheet").hidden) renderSheet(); }
@@ -303,7 +321,7 @@ function change(key, d) {
   if (q) state.cart[key] = q; else delete state.cart[key];
   refresh();
 }
-function openSheet() { renderSheet(); $("sheet").hidden = false; $("close").focus(); }
+function openSheet() { $("checkoutForm").hidden = false; $("wa").hidden = true; $("checkoutMessage").textContent = ""; renderSheet(); $("sheet").hidden = false; $("close").focus(); }
 function closeSheet() { $("sheet").hidden = true; }
 
 function toast(t) {
@@ -360,8 +378,8 @@ async function connectMenuToSupabase() {
       if (!section) continue;
       const groupName = p.group_name_ar || 'الأصناف';
       if (!section.groups.has(groupName)) section.groups.set(groupName, []);
-      const itemName = p.size_label_ar ? `${p.name_ar} – ${p.size_label_ar}` : p.name_ar;
-      section.groups.get(groupName).push([itemName, p.price == null ? null : Number(p.price)]);
+      const itemName = p.name_ar;
+      section.groups.get(groupName).push([itemName, p.price == null ? null : Number(p.price), p.id]);
     }
     const fromDb = [...grouped.values()].map(s => ({id:s.id,title:s.title,icon:s.icon,groups:[...s.groups.entries()].map(([name,items])=>({name,items}))})).filter(s=>s.groups.some(g=>g.items.length));
     if (fromDb.length) MENU = fromDb;
@@ -371,8 +389,64 @@ async function connectMenuToSupabase() {
     renderTabs(); refresh();
   }
 }
+
+let DELIVERY_ZONES = [];
+function selectedZone(){ return DELIVERY_ZONES.find(z=>z.id === $("deliveryZone").value) || null; }
+function updateCheckoutTotals(){
+  const zone=selectedZone();
+  $("deliveryFee").textContent=zone?fmt(Number(zone.delivery_fee)):"—";
+  $("grandTotal").textContent=zone?fmt(total()+Number(zone.delivery_fee)):fmt(total());
+}
+async function loadDeliveryZones(){
+  const sel=$("deliveryZone");
+  if(!window.supabaseClient){sel.innerHTML='<option value="">تعذر الاتصال بقاعدة البيانات</option>';return;}
+  const {data,error}=await supabaseClient.from('delivery_zones').select('id,name_ar,name_en,delivery_fee').eq('is_active',true).order('sort_order');
+  if(error){sel.innerHTML='<option value="">تعذر تحميل المناطق</option>';console.error(error);return;}
+  DELIVERY_ZONES=data||[];
+  sel.innerHTML='<option value="">اختر منطقة التوصيل</option>'+DELIVERY_ZONES.map(z=>`<option value="${z.id}">${z.name_ar} — ${fmt(Number(z.delivery_fee))}</option>`).join('');
+  updateCheckoutTotals();
+}
+$("deliveryZone").addEventListener('change',updateCheckoutTotals);
+$("paymentMethod").addEventListener('change',()=>{$("bankDetails").hidden=$("paymentMethod").value!=='bank_transfer';});
+$("checkoutForm").addEventListener('submit',async e=>{
+  e.preventDefault();
+  const message=$("checkoutMessage"),button=$("submitOrder");
+  if(!entries().length){message.textContent='أضف أصنافًا إلى الطلب أولًا.';return;}
+  const zone=selectedZone();
+  if(!zone){message.textContent='لا توجد منطقة توصيل مفعّلة حاليًا. يرجى التواصل مع المطعم.';return;}
+  const cartItems=entries().map(([key,quantity])=>({product_id:ITEMS[key].product_id,quantity}));
+  if(cartItems.some(x=>!x.product_id)){message.textContent='الطلب عبر قاعدة البيانات يتطلب تحميل قائمة المنتجات من Supabase. حدّث الصفحة وحاول مجددًا.';return;}
+  button.disabled=true;button.textContent='جارٍ حفظ الطلب…';message.textContent='';
+  try{
+    const {data,error}=await supabaseClient.rpc('create_customer_order',{
+      p_customer_name:$("customerName").value.trim(),
+      p_customer_phone:$("customerPhone").value.trim(),
+      p_delivery_address:$("deliveryAddress").value.trim(),
+      p_delivery_zone_id:zone.id,
+      p_payment_method:$("paymentMethod").value,
+      p_items:cartItems,
+      p_customer_notes:$("customerNotes").value.trim()||null,
+      p_language:'ar',
+      p_payment_reference:$("paymentReference").value.trim()||null
+    });
+    if(error) throw error;
+    const successText=`تم حفظ طلبك بنجاح.\nرقم الطلب: ${data.order_number}\nقيمة الأصناف: ${fmt(Number(data.subtotal))}\nالتوصيل: ${fmt(Number(data.delivery_fee))}\nالإجمالي: ${fmt(Number(data.total))}\n${data.payment_method==='bank_transfer'?'حالة الدفع: بانتظار مراجعة التحويل.':'الدفع: نقدًا عند الاستلام.'}`;
+    message.textContent=successText;
+    const itemLines=entries().map(([key,quantity])=>`• ${quantity} × ${ITEMS[key].n} = ${fmt(ITEMS[key].p*quantity)}`).join('\n');
+    const receipt=`طلب جديد — أيامك يا شام\nرقم الطلب: ${data.order_number}\nالاسم: ${$("customerName").value.trim()}\nالهاتف: ${$("customerPhone").value.trim()}\nالعنوان: ${$("deliveryAddress").value.trim()}\nالمنطقة: ${zone.name_ar}\nالأصناف:\n${itemLines}\nطريقة الدفع: ${data.payment_method==='bank_transfer'?'تحويل بنكي':'نقدًا عند الاستلام'}\nالإجمالي: ${fmt(Number(data.total))}`;
+    $("wa").href=`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(receipt)}`;
+    $("wa").hidden=false;$("wa").textContent='إرسال تفاصيل الطلب عبر واتساب';
+    // Keep the successful receipt and WhatsApp action visible; do not close the sheet automatically.
+    $("checkoutForm").hidden=true;
+    state.cart={}; refresh();
+    message.textContent=successText+'\nيمكنك الآن إرسال تفاصيل الطلب إلى المطعم عبر واتساب أو إغلاق هذه النافذة.';
+  }catch(err){console.error(err);message.textContent='تعذر حفظ الطلب: '+(err.message||'خطأ غير معروف')+'\nيرجى المحاولة مجددًا أو التواصل مع المطعم.';}
+  finally{button.disabled=false;button.textContent='تأكيد الطلب وحفظه';}
+});
+
 renderTabs(); refresh();
 connectMenuToSupabase();
+loadDeliveryZones();
 </script>
 </body>
 </html>
