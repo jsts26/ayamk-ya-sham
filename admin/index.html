@@ -87,7 +87,12 @@ window.toggleProduct=async(id,value)=>{const {error}=await supabaseClient.from('
 const paymentStatuses=[['pending','قيد الانتظار'],['awaiting_transfer','بانتظار التحويل'],['under_review','قيد المراجعة'],['paid','مدفوع'],['failed','فشل'],['rejected','مرفوض'],['unpaid','غير مدفوع']];
 const payNames={cash_on_delivery:'نقدًا عند الاستلام',bank_transfer:'تحويل بنكي',card:'بطاقة'};
 const fmtMoney=n=>Number(n||0).toLocaleString('en-US')+' ج.س';
-async function loadOrders(){const msg=$('ordersMsg'),body=$('ordersBody');msg.textContent='جارٍ تحميل الطلبات…';const {data,error}=await supabaseClient.from('orders').select('id,order_number,customer_name,customer_phone,delivery_address,customer_notes,subtotal,delivery_fee,total,payment_method,payment_status,payment_reference,status,created_at,order_type,table_number,order_source').order('created_at',{ascending:false}).limit(100);if(error){msg.textContent='تعذر تحميل الطلبات: '+error.message;return}body.innerHTML=(data||[]).map(o=>`<tr><td>#${o.order_number}<div class=\"muted\">${o.order_type==='dine_in'?'داخل المطعم — طاولة '+(o.table_number||'—'):(o.order_type||'توصيل')}</div></td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}<div class="muted">${esc(o.delivery_address)}</div>${o.customer_notes?`<div class="muted">ملاحظات: ${esc(o.customer_notes)}</div>`:''}${o.payment_reference?`<div class="muted">مرجع التحويل: ${esc(o.payment_reference)}</div>`:''}</td><td>${fmtMoney(o.total)}</td><td>${esc(payNames[o.payment_method]||o.payment_method||'—')}</td><td><select data-order-status="${o.id}">${orderStatuses.map(([v,l])=>`<option value="${v}" ${o.status===v?'selected':''}>${l}</option>`).join('')}</select></td><td><select data-payment-status="${o.id}">${paymentStatuses.map(([v,l])=>`<option value="${v}" ${o.payment_status===v?'selected':''}>${l}</option>`).join('')}</select></td><td>${new Date(o.created_at).toLocaleString('ar')}</td><td><button onclick="saveOrder('${o.id}')">حفظ</button></td></tr>`).join('');msg.textContent=`عدد الطلبات المعروضة: ${(data||[]).length}`;}
+async function loadOrders(){const msg=$('ordersMsg'),body=$('ordersBody');msg.textContent='جارٍ تحميل الطلبات…';const {data,error}=await supabaseClient.from('orders').select('id,order_number,customer_name,customer_phone,delivery_address,customer_notes,subtotal,delivery_fee,total,payment_method,payment_status,payment_reference,status,created_at,order_type,table_number,order_source').order('created_at',{ascending:false}).limit(100);if(error){msg.textContent='تعذر تحميل الطلبات: '+error.message;return}body.innerHTML=(data||[]).map(o=>`<tr><td>#${o.order_number}<div class=\"muted\">${o.order_type==='dine_in'?'داخل المطعم — طاولة '+(o.table_number||'—'):(o.order_type||'توصيل')}</div></td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}<div class="muted">${esc(o.delivery_address)}</div>${o.customer_notes?`<div class="muted">ملاحظات: ${esc(o.customer_notes)}</div>`:''}${o.payment_reference?`<div class="muted">مرجع التحويل: ${esc(o.payment_reference)}</div>`:''}</td><td>${fmtMoney(o.total)}</td><td>${esc(payNames[o.payment_method]||o.payment_method||'—')}</td><td><select data-order-status="${o.id}">${orderStatuses.map(([v,l])=>`<option value="${v}" ${o.status===v?'selected':''}>${l}</option>`).join('')}</select></td><td><select data-payment-status="${o.id}">${paymentStatuses.map(([v,l])=>`<option value="${v}" ${o.payment_status===v?'selected':''}>${l}</option>`).join('')}</select></td><td>${new Date(o.created_at).toLocaleString('ar')}</td>
+<td>
+  <button onclick="saveOrder('${o.id}')">حفظ</button>
+  <button type="button" onclick="printOrder('${o.id}')">🖨️ طباعة</button>
+</td>
+</tr>`).join('');msg.textContent=`عدد الطلبات المعروضة: ${(data||[]).length}`;}
 
 async function loadDeliveryAssignments() {
   const msg = $('assignDeliveryMsg');
@@ -320,6 +325,97 @@ $('staffManagementBody')?.addEventListener('click', event => {
   const row = button.closest('[data-staff-row]');
   if (row) saveStaffProfile(row);
 });
+window.printOrder = async function(orderId) {
+  const msg = $('ordersMsg');
+  msg.textContent = 'جارٍ تجهيز الطلب للطباعة...';
+
+  try {
+    const { data: order, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (error) throw error;
+
+    const { data: items, error: itemsError } = await supabaseClient
+      .from('order_items')
+      .select('*')
+      .eq('order_id', orderId);
+
+    if (itemsError) throw itemsError;
+
+    const money = value =>
+      Number(value || 0).toLocaleString('ar-SA', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+
+    const safe = value => esc(String(value ?? '—'));
+
+    const itemRows = (items || []).map(item => `
+      <tr>
+        <td>${safe(item.product_name_ar || item.product_name_en)}</td>
+        <td>${Number(item.quantity || 0)}</td>
+        <td>${money(item.unit_price)}</td>
+        <td>${money(item.line_total)}</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=800,height=700');
+
+    if (!printWindow) {
+      throw new Error('يرجى السماح بالنوافذ المنبثقة لهذا الموقع.');
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="utf-8">
+        <title>طلب رقم ${safe(order.order_number)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
+          h1, h2 { text-align: center; }
+          .info { line-height: 1.9; margin: 20px 0; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #bbb; padding: 8px; text-align: right; }
+          th { background: #eee; }
+          .total { margin-top: 20px; font-size: 20px; font-weight: bold; }
+          @media print { button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>أيامك يا شام</h1>
+        <h2>فاتورة الطلب</h2>
+        <div class="info">
+          <div>رقم الطلب: ${safe(order.order_number)}</div>
+          <div>العميل: ${safe(order.customer_name)}</div>
+          <div>الهاتف: ${safe(order.customer_phone)}</div>
+          <div>العنوان: ${safe(order.delivery_address)}</div>
+          <div>التاريخ: ${safe(order.created_at ? new Date(order.created_at).toLocaleString('ar-SA') : '—')}</div>
+          <div>حالة الطلب: ${safe(order.status)}</div>
+          <div>طريقة الدفع: ${safe(order.payment_method)}</div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+        <div class="total">الإجمالي: ${money(order.total)}</div>
+        <p>شكرًا لطلبكم من أيامك يا شام</p>
+        <button onclick="window.print()">طباعة</button>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    msg.textContent = 'تم تجهيز الفاتورة للطباعة.';
+  } catch (err) {
+    msg.textContent = 'تعذرت طباعة الطلب: ' + (err.message || 'خطأ غير معروف');
+  }
+};
 
 window.saveOrder=async id=>{const status=document.querySelector(`[data-order-status="${id}"]`)?.value;const payment_status=document.querySelector(`[data-payment-status="${id}"]`)?.value;const {error}=await supabaseClient.from('orders').update({status,payment_status}).eq('id',id);if(error){$('ordersMsg').textContent='تعذر تحديث الطلب: '+error.message;return}$('ordersMsg').textContent='تم تحديث الطلب.';};
 function renderStaffProductQuantities(){const root=$('staffProductQuantities');if(!root)return;const available=products.filter(p=>p.is_available&&p.price!==null);root.innerHTML=available.map(p=>`<div><label>${esc(p.name_ar)} — ${fmtMoney(p.price)}<input type="number" min="0" max="100" step="1" value="0" data-staff-product="${p.id}" aria-label="كمية ${esc(p.name_ar)}"></label></div>`).join('')||'<p class="muted">لا توجد أصناف متاحة بأسعار محددة.</p>';}
