@@ -54,9 +54,112 @@ const paymentStatuses=[['pending','قيد الانتظار'],['awaiting_transfer
 const payNames={cash_on_delivery:'نقدًا عند الاستلام',bank_transfer:'تحويل بنكي',card:'بطاقة'};
 const fmtMoney=n=>Number(n||0).toLocaleString('en-US')+' ج.س';
 async function loadOrders(){const msg=$('ordersMsg'),body=$('ordersBody');msg.textContent='جارٍ تحميل الطلبات…';const {data,error}=await supabaseClient.from('orders').select('id,order_number,customer_name,customer_phone,delivery_address,customer_notes,subtotal,delivery_fee,total,payment_method,payment_status,payment_reference,status,created_at,order_type,table_number,order_source').order('created_at',{ascending:false}).limit(100);if(error){msg.textContent='تعذر تحميل الطلبات: '+error.message;return}body.innerHTML=(data||[]).map(o=>`<tr><td>#${o.order_number}<div class=\"muted\">${o.order_type==='dine_in'?'داخل المطعم — طاولة '+(o.table_number||'—'):(o.order_type||'توصيل')}</div></td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}<div class="muted">${esc(o.delivery_address)}</div>${o.customer_notes?`<div class="muted">ملاحظات: ${esc(o.customer_notes)}</div>`:''}${o.payment_reference?`<div class="muted">مرجع التحويل: ${esc(o.payment_reference)}</div>`:''}</td><td>${fmtMoney(o.total)}</td><td>${esc(payNames[o.payment_method]||o.payment_method||'—')}</td><td><select data-order-status="${o.id}">${orderStatuses.map(([v,l])=>`<option value="${v}" ${o.status===v?'selected':''}>${l}</option>`).join('')}</select></td><td><select data-payment-status="${o.id}">${paymentStatuses.map(([v,l])=>`<option value="${v}" ${o.payment_status===v?'selected':''}>${l}</option>`).join('')}</select></td><td>${new Date(o.created_at).toLocaleString('ar')}</td><td><button onclick="saveOrder('${o.id}')">حفظ</button></td></tr>`).join('');msg.textContent=`عدد الطلبات المعروضة: ${(data||[]).length}`;}
+
+async function loadDeliveryAssignments() {
+  const msg = $('assignDeliveryMsg');
+  const orderSelect = $('assignOrder');
+  const driverSelect = $('assignDriver');
+
+  if (!msg || !orderSelect || !driverSelect) return;
+
+  msg.textContent = 'جارٍ تحميل الطلبات وموظفي التوصيل...';
+
+  orderSelect.innerHTML = '<option value="">اختر الطلب</option>';
+  driverSelect.innerHTML = '<option value="">اختر موظف التوصيل</option>';
+
+  const { data: orders, error: ordersError } = await supabaseClient
+    .from('orders')
+    .select('id,order_number,customer_name,status,order_type,assigned_driver_id')
+    .eq('order_type', 'delivery')
+    .not('status', 'in', '("completed","cancelled")')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (ordersError) {
+    msg.textContent = 'تعذر تحميل الطلبات: ' + ordersError.message;
+    return;
+  }
+
+  const { data: drivers, error: driversError } = await supabaseClient
+    .from('staff_profiles')
+    .select('user_id,display_name,is_active')
+    .eq('role', 'delivery')
+    .eq('is_active', true)
+    .order('display_name');
+
+  if (driversError) {
+    msg.textContent = 'تعذر تحميل موظفي التوصيل: ' + driversError.message;
+    return;
+  }
+
+  orderSelect.innerHTML =
+    '<option value="">اختر الطلب</option>' +
+    (orders || []).map(o => {
+      const driver = (drivers || []).find(
+        d => d.user_id === o.assigned_driver_id
+      );
+      const label = `#${o.order_number} — ${o.customer_name || 'عميل'} — ${o.status}` +
+        (driver ? ` — مسند إلى ${driver.display_name || 'موظف توصيل'}` : ' — غير مسند');
+
+      return `<option value="${esc(o.id)}">${esc(label)}</option>`;
+    }).join('');
+
+  driverSelect.innerHTML =
+    '<option value="">اختر موظف التوصيل</option>' +
+    (drivers || []).map(d =>
+      `<option value="${esc(d.user_id)}">${esc(d.display_name || d.user_id)}</option>`
+    ).join('');
+
+  msg.textContent =
+    `تم تحميل ${orders?.length || 0} طلب توصيل و${drivers?.length || 0} موظف توصيل نشط.`;
+}
+
+async function assignDeliveryOrder() {
+  const msg = $('assignDeliveryMsg');
+  const btn = $('assignDeliveryBtn');
+  const orderId = $('assignOrder')?.value;
+  const driverId = $('assignDriver')?.value;
+
+  if (!orderId || !driverId) {
+    msg.textContent = 'اختر طلب التوصيل وموظف التوصيل أولاً.';
+    return;
+  }
+
+  if (!confirm('هل تريد إسناد الطلب إلى موظف التوصيل المحدد؟')) return;
+
+  btn.disabled = true;
+  msg.textContent = 'جارٍ إسناد الطلب...';
+
+  try {
+    const { data, error } = await supabaseClient.rpc(
+      'manager_assign_delivery_order',
+      {
+        p_order_id: orderId,
+        p_driver_user_id: driverId
+      }
+    );
+
+    if (error) throw error;
+    if (data?.success === false) {
+      throw new Error(data.message || 'لم يتم إسناد الطلب.');
+    }
+
+    msg.textContent = 'تم إسناد الطلب بنجاح.';
+    await loadDeliveryAssignments();
+    await loadOrders();
+  } catch (err) {
+    msg.textContent = 'تعذر إسناد الطلب: ' + (err.message || 'خطأ غير معروف');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('assignDeliveryBtn')?.addEventListener('click', assignDeliveryOrder);
+$('refreshAssignments')?.addEventListener('click', loadDeliveryAssignments);
+
 window.saveOrder=async id=>{const status=document.querySelector(`[data-order-status="${id}"]`)?.value;const payment_status=document.querySelector(`[data-payment-status="${id}"]`)?.value;const {error}=await supabaseClient.from('orders').update({status,payment_status}).eq('id',id);if(error){$('ordersMsg').textContent='تعذر تحديث الطلب: '+error.message;return}$('ordersMsg').textContent='تم تحديث الطلب.';};
 function renderStaffProductQuantities(){const root=$('staffProductQuantities');if(!root)return;const available=products.filter(p=>p.is_available&&p.price!==null);root.innerHTML=available.map(p=>`<div><label>${esc(p.name_ar)} — ${fmtMoney(p.price)}<input type="number" min="0" max="100" step="1" value="0" data-staff-product="${p.id}" aria-label="كمية ${esc(p.name_ar)}"></label></div>`).join('')||'<p class="muted">لا توجد أصناف متاحة بأسعار محددة.</p>';}
 $('staffOrderForm').addEventListener('submit',async e=>{e.preventDefault();const msg=$('staffOrderMsg');const items=[...document.querySelectorAll('[data-staff-product]')].map(el=>({product_id:el.dataset.staffProduct,quantity:Number(el.value)})).filter(x=>Number.isInteger(x.quantity)&&x.quantity>0);if(!$('staffTable').value){msg.textContent='اختر رقم الطاولة.';return;}if(!items.length){msg.textContent='حدد كمية صنف واحد على الأقل.';return;}const btn=$('staffSubmit');btn.disabled=true;msg.textContent='جارٍ حفظ الطلب…';try{const {data,error}=await supabaseClient.rpc('create_customer_order_v2',{p_customer_name:$('staffCustomer').value.trim()||null,p_customer_phone:$('staffPhone').value.trim()||null,p_delivery_address:null,p_delivery_zone_id:null,p_payment_method:$('staffPayment').value,p_items:items,p_customer_notes:$('staffNotes').value.trim()||null,p_language:'ar',p_payment_reference:null,p_order_type:'dine_in',p_table_token:null,p_table_number:Number($('staffTable').value),p_staff_order:true});if(error)throw error;msg.textContent=`تم حفظ الطلب رقم #${data.order_number} — طاولة ${data.table_number} — الإجمالي ${fmtMoney(data.total)}.`;document.querySelectorAll('[data-staff-product]').forEach(el=>el.value='0');$('staffCustomer').value='';$('staffPhone').value='';$('staffNotes').value='';await loadOrders();}catch(err){msg.textContent='تعذر حفظ الطلب: '+(err.message||'خطأ غير معروف');}finally{btn.disabled=false;}});
 $('reloadOrders').onclick=loadOrders;
-$('logout').onclick=async()=>{await supabaseClient.auth.signOut();location.href='./login.html'};init().then(()=>loadOrders());
+$('logout').onclick=async()=>{await supabaseClient.auth.signOut();location.href='./login.html'};init().then(()=>Promise.all([loadOrders(),loadDeliveryAssignments()]));
 </script></body></html>
