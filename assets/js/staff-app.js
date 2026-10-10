@@ -98,33 +98,78 @@
     if (supabaseClient) await supabaseClient.auth.signOut();
     location.href = loginUrl;
   }
-  async function signIn(event) {
-    event.preventDefault(); clearMessage();
-    const email = $("#email")?.value.trim();
-    const password = $("#password")?.value;
-    if (!email || !password) return showMessage("أدخل البريد الإلكتروني وكلمة المرور.", true);
-    const btn = $("#login-submit"); if (btn) btn.disabled = true;
-    try {
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      currentUser = data.user;
-      const { data: profile, error: pErr } = await supabaseClient.from("staff_profiles")
-        .select("role,is_active").eq("user_id", currentUser.id).maybeSingle();
-      if (pErr) throw pErr;
-      if (!profile || !profile.is_active || !roleLabels[profile.role]) {
-        await supabaseClient.auth.signOut();
-        throw new Error("بيانات الدخول صحيحة، لكن الحساب غير مفعّل كموظف. تواصل مع المدير.");
-      }
-      const { data: role, error: rErr } = await supabaseClient.rpc("current_staff_role");
-      if (rErr) throw rErr;
-      if (role !== profile.role) throw new Error("تعذر التحقق من دور الموظف. راجع إعدادات قاعدة البيانات.");
-      location.href = siteHref(`/staff/${role}.html`);
-    } catch (err) {
-      showMessage(err.message || "تعذر تسجيل الدخول.", true);
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+
+async function signIn(event) {
+  event.preventDefault();
+  clearMessage();
+
+  const email = $("#email")?.value.trim();
+  const password = $("#password")?.value;
+
+  if (!email || !password) {
+    return showMessage("أدخل البريد الإلكتروني وكلمة المرور.", true);
   }
+
+  const btn = $("#login-submit");
+  if (btn) btn.disabled = true;
+
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) throw error;
+
+    currentUser = data.user;
+
+    // Check whether the signed-in user is an administrator.
+    const { data: isAdmin, error: adminError } =
+      await supabaseClient.rpc("is_admin");
+
+    if (adminError) throw adminError;
+
+    if (isAdmin === true) {
+      location.href = siteHref("/admin/");
+      return;
+    }
+
+    // Otherwise, require an active staff profile.
+    const { data: profile, error: profileError } =
+      await supabaseClient
+        .from("staff_profiles")
+        .select("role,is_active")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+    if (profileError) throw profileError;
+
+    if (!profile || !profile.is_active || !roleLabels[profile.role]) {
+      await supabaseClient.auth.signOut();
+      currentUser = null;
+      throw new Error(
+        "هذا الحساب ليس مديراً أو موظفاً مفعّلاً."
+      );
+    }
+
+    const { data: role, error: roleError } =
+      await supabaseClient.rpc("current_staff_role");
+
+    if (roleError) throw roleError;
+
+    if (role !== profile.role) {
+      throw new Error("تعذر التحقق من دور الموظف.");
+    }
+
+    location.href = siteHref(`/staff/${role}.html`);
+
+  } catch (err) {
+    showMessage(err.message || "تعذر تسجيل الدخول.", true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
   function orderItemsHtml(items) {
     if (!items?.length) return `<div class="staff-small">لا توجد تفاصيل أصناف متاحة.</div>`;
     return `<ul class="staff-items">${items.map(i =>
