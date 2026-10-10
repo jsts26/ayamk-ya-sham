@@ -5,6 +5,37 @@
 <section class="panel"><h2>إدارة الأقسام</h2><form id="categoryForm" class="grid"><div><label for="cat_ar">اسم القسم بالعربية *</label><input id="cat_ar" required></div><div><label for="cat_en">اسم القسم بالإنجليزية</label><input id="cat_en"></div><div><label for="cat_sort">ترتيب العرض</label><input id="cat_sort" type="number" value="0"></div><div class="actions" style="align-items:end"><button>إضافة قسم</button></div></form><div id="categoryMsg" class="msg" role="status"></div><div id="categoryList"></div></section>
 <section class="panel"><h2>الأصناف الحالية</h2><div class="grid"><div><label for="filter">بحث</label><input id="filter" placeholder="ابحث باسم الصنف"></div><div><label for="availabilityFilter">الحالة</label><select id="availabilityFilter"><option value="all">الكل</option><option value="true">المتاحة</option><option value="false">غير المتاحة</option></select></div></div><div id="listMsg" class="msg" role="status"></div><div class="tablewrap"><table><thead><tr><th>الصورة</th><th>الصنف</th><th>القسم</th><th>السعر</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="productsBody"></tbody></table></div></section>
 <section class="panel"><h2>إنشاء طلب بواسطة الموظف</h2><p class="muted">اختر الطاولة والأصناف والكميات، ثم احفظ الطلب. الطلبات هنا داخل المطعم فقط.</p><form id="staffOrderForm"><div class="grid"><div><label for="staffTable">رقم الطاولة *</label><select id="staffTable" required><option value="">اختر الطاولة</option><option value="1">طاولة 1</option><option value="2">طاولة 2</option><option value="3">طاولة 3</option><option value="4">طاولة 4</option><option value="5">طاولة 5</option><option value="6">طاولة 6</option><option value="7">طاولة 7</option><option value="8">طاولة 8</option><option value="9">طاولة 9</option><option value="10">طاولة 10</option></select></div><div><label for="staffPayment">طريقة الدفع *</label><select id="staffPayment" required><option value="cash_on_delivery">نقدًا</option><option value="bank_transfer">تحويل بنكي</option></select></div><div><label for="staffCustomer">اسم العميل (اختياري)</label><input id="staffCustomer" placeholder="اسم العميل"></div><div><label for="staffPhone">رقم الهاتف (اختياري)</label><input id="staffPhone" type="tel" placeholder="رقم الهاتف"></div></div><label for="staffNotes">ملاحظات</label><textarea id="staffNotes" placeholder="ملاحظات الطلب"></textarea><h3>الأصناف والكميات</h3><div id="staffProductQuantities" class="grid"></div><div class="actions"><button type="submit" id="staffSubmit">إنشاء الطلب</button></div></form><div id="staffOrderMsg" class="msg" role="status"></div></section>
+
+<section class="panel">
+  <h2>إسناد طلبات التوصيل</h2>
+  <p class="muted">اختر طلب توصيل وموظفًا نشطًا لإسناد الطلب إليه.</p>
+
+  <div class="grid">
+    <div>
+      <label for="assignOrder">طلب التوصيل</label>
+      <select id="assignOrder">
+        <option value="">جارٍ تحميل الطلبات...</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="assignDriver">موظف التوصيل</label>
+      <select id="assignDriver">
+        <option value="">جارٍ تحميل الموظفين...</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="assignDeliveryBtn">إسناد الطلب</button>
+    <button type="button" id="refreshAssignments" class="secondary">
+      تحديث القوائم
+    </button>
+  </div>
+
+  <div id="assignDeliveryMsg" class="msg" role="status"></div>
+</section>
+
 <section class="panel"><h2>الطلبات الواردة</h2><div class="actions"><button type="button" id="reloadOrders" class="secondary">تحديث الطلبات</button></div><div id="ordersMsg" class="msg" role="status"></div><div class="tablewrap"><table style="min-width:1100px"><thead><tr><th>رقم الطلب</th><th>العميل</th><th>الهاتف والعنوان</th><th>الإجمالي</th><th>الدفع</th><th>حالة الطلب</th><th>حالة الدفع</th><th>التاريخ</th><th>حفظ</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section>
 <p class="muted">تتيح اللوحة إدارة الأصناف والأقسام ومراجعة الطلبات. لا تضف بيانات حساسة أو مفاتيح سرية في ملفات الموقع.</p></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="../assets/js/supabase.js"></script><script>
