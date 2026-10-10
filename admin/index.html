@@ -91,6 +91,7 @@ async function loadOrders(){const msg=$('ordersMsg'),body=$('ordersBody');msg.te
 <td>
   <button onclick="saveOrder('${o.id}')">حفظ</button>
   <button type="button" onclick="printOrder('${o.id}')">🖨️ طباعة</button>
+<button type="button" onclick="printKitchenTicket('${o.id}')">🍳 تذكرة المطبخ</button>
 </td>
 </tr>`).join('');msg.textContent=`عدد الطلبات المعروضة: ${(data||[]).length}`;}
 
@@ -325,6 +326,120 @@ $('staffManagementBody')?.addEventListener('click', event => {
   const row = button.closest('[data-staff-row]');
   if (row) saveStaffProfile(row);
 });
+
+window.printKitchenTicket = async function(orderId) {
+  const msg = $('ordersMsg');
+  msg.textContent = 'جارٍ تجهيز تذكرة المطبخ...';
+
+  try {
+    const { data: order, error } = await supabaseClient
+      .from('orders')
+      .select('id,order_number,customer_notes,created_at,order_type,table_number')
+      .eq('id', orderId)
+      .single();
+
+    if (error) throw error;
+
+    const { data: items, error: itemsError } = await supabaseClient
+      .from('order_items')
+      .select('product_name_ar,product_name_en,quantity')
+      .eq('order_id', orderId);
+
+    if (itemsError) throw itemsError;
+
+    const safe = value => esc(String(value ?? '—'));
+
+    const itemRows = (items || []).map(item => `
+      <li>
+        <span>${safe(item.product_name_ar || item.product_name_en)}</span>
+        <strong>× ${Number(item.quantity || 0)}</strong>
+      </li>
+    `).join('');
+
+    const ticketWindow = window.open('', '_blank', 'width=600,height=700');
+
+    if (!ticketWindow) {
+      throw new Error('يرجى السماح بالنوافذ المنبثقة لهذا الموقع.');
+    }
+
+    ticketWindow.document.write(`
+      <!doctype html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="utf-8">
+        <title>تذكرة مطبخ #${safe(order.order_number)}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 18px;
+            color: #000;
+          }
+          h1, h2 { text-align: center; margin: 8px 0; }
+          .line {
+            border-top: 2px dashed #555;
+            margin: 14px 0;
+          }
+          .info { font-size: 18px; line-height: 1.8; }
+          ul { list-style: none; padding: 0; margin: 12px 0; }
+          li {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #ccc;
+            font-size: 22px;
+          }
+          .notes {
+            font-size: 19px;
+            font-weight: bold;
+            white-space: pre-wrap;
+          }
+          button { width: 100%; padding: 12px; font-size: 18px; }
+          @media print {
+            button { display: none; }
+            body { margin: 5mm; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>أيامك يا شام</h1>
+        <h2>تذكرة المطبخ</h2>
+        <div class="line"></div>
+        <div class="info">
+          <div><strong>رقم الطلب:</strong> #${safe(order.order_number)}</div>
+          <div><strong>النوع:</strong> ${
+            order.order_type === 'dine_in'
+              ? 'داخل المطعم — طاولة ' + safe(order.table_number)
+              : safe(order.order_type || 'توصيل')
+          }</div>
+          <div><strong>وقت الطلب:</strong> ${
+            safe(order.created_at
+              ? new Date(order.created_at).toLocaleString('ar')
+              : '—')
+          }</div>
+        </div>
+        <div class="line"></div>
+        <h2>الأصناف والكميات</h2>
+        <ul>${itemRows || '<li>لا توجد أصناف مسجلة</li>'}</ul>
+        ${
+          order.customer_notes
+            ? `<div class="line"></div>
+               <div class="notes">ملاحظات التحضير:\n${safe(order.customer_notes)}</div>`
+            : ''
+        }
+        <div class="line"></div>
+        <button onclick="window.print()">طباعة تذكرة المطبخ</button>
+      </body>
+      </html>
+    `);
+
+    ticketWindow.document.close();
+    msg.textContent = 'تم تجهيز تذكرة المطبخ.';
+  } catch (err) {
+    msg.textContent = 'تعذرت طباعة تذكرة المطبخ: ' +
+      (err.message || 'خطأ غير معروف');
+  }
+};
 window.printOrder = async function(orderId) {
   const msg = $('ordersMsg');
   msg.textContent = 'جارٍ تجهيز الطلب للطباعة...';
