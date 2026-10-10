@@ -36,6 +36,40 @@
   <div id="assignDeliveryMsg" class="msg" role="status"></div>
 </section>
 
+<section class="panel" id="staffManagement">
+  <h2>إدارة الموظفين والصلاحيات</h2>
+  <p class="muted">
+    يمكنك تعديل اسم الموظف ودوره أو تفعيل حسابه وتعطيله.
+  </p>
+
+  <div class="actions">
+    <button type="button" id="refreshStaff" class="secondary">
+      تحديث قائمة الموظفين
+    </button>
+  </div>
+
+  <div id="staffManagementMsg" class="msg" role="status"></div>
+
+  <div class="tablewrap">
+    <table style="min-width:850px">
+      <thead>
+        <tr>
+          <th>معرّف المستخدم</th>
+          <th>اسم الموظف</th>
+          <th>الدور</th>
+          <th>الحالة</th>
+          <th>حفظ التغييرات</th>
+        </tr>
+      </thead>
+      <tbody id="staffManagementBody">
+        <tr>
+          <td colspan="5">اضغط على تحديث قائمة الموظفين.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 <section class="panel"><h2>الطلبات الواردة</h2><div class="actions"><button type="button" id="reloadOrders" class="secondary">تحديث الطلبات</button></div><div id="ordersMsg" class="msg" role="status"></div><div class="tablewrap"><table style="min-width:1100px"><thead><tr><th>رقم الطلب</th><th>العميل</th><th>الهاتف والعنوان</th><th>الإجمالي</th><th>الدفع</th><th>حالة الطلب</th><th>حالة الدفع</th><th>التاريخ</th><th>حفظ</th></tr></thead><tbody id="ordersBody"></tbody></table></div></section>
 <p class="muted">تتيح اللوحة إدارة الأصناف والأقسام ومراجعة الطلبات. لا تضف بيانات حساسة أو مفاتيح سرية في ملفات الموقع.</p></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="../assets/js/supabase.js"></script><script>
@@ -156,10 +190,144 @@ async function assignDeliveryOrder() {
 
 $('assignDeliveryBtn')?.addEventListener('click', assignDeliveryOrder);
 $('refreshAssignments')?.addEventListener('click', loadDeliveryAssignments);
+async function loadStaffManagement() {
+  const msg = $('staffManagementMsg');
+  const body = $('staffManagementBody');
+
+  if (!msg || !body) return;
+
+  msg.textContent = 'جارٍ تحميل الموظفين...';
+  body.innerHTML = '';
+
+  try {
+    const { data, error } = await supabaseClient.rpc('manager_list_staff');
+
+    if (error) throw error;
+
+    const staff = data || [];
+
+    if (!staff.length) {
+      body.innerHTML =
+        '<tr><td colspan="5">لا يوجد موظفون مسجلون بعد.</td></tr>';
+      msg.textContent = 'تم تحميل القائمة.';
+      return;
+    }
+
+    const roles = {
+      orders: 'الطلبات',
+      kitchen: 'المطبخ',
+      cashier: 'الصندوق',
+      menu: 'إدارة القائمة',
+      delivery: 'التوصيل'
+    };
+
+    body.innerHTML = staff.map(s => `
+      <tr data-staff-row="${esc(s.user_id)}">
+        <td style="max-width:230px;overflow-wrap:anywhere">
+          ${esc(s.user_id)}
+        </td>
+        <td>
+          <input
+            type="text"
+            data-staff-name
+            maxlength="120"
+            value="${esc(s.display_name)}"
+            aria-label="اسم الموظف"
+          >
+        </td>
+        <td>
+          <select data-staff-role aria-label="دور الموظف">
+            ${Object.entries(roles).map(([value, label]) => `
+              <option value="${value}" ${s.role === value ? 'selected' : ''}>
+                ${label}
+              </option>
+            `).join('')}
+          </select>
+        </td>
+        <td>
+          <label>
+            <input type="checkbox" data-staff-active
+              ${s.is_active ? 'checked' : ''}>
+            نشط
+          </label>
+        </td>
+        <td>
+          <button type="button" data-save-staff>
+            حفظ
+          </button>
+          <span data-staff-row-msg class="msg" role="status"></span>
+        </td>
+      </tr>
+    `).join('');
+
+    msg.textContent = `تم تحميل ${staff.length} موظفًا.`;
+  } catch (err) {
+    msg.textContent = 'تعذر تحميل الموظفين: ' +
+      (err.message || 'خطأ غير معروف');
+    body.innerHTML =
+      '<tr><td colspan="5">تعذر تحميل القائمة.</td></tr>';
+  }
+}
+
+async function saveStaffProfile(row) {
+  const button = row.querySelector('[data-save-staff]');
+  const rowMsg = row.querySelector('[data-staff-row-msg]');
+  const userId = row.dataset.staffRow;
+  const displayName = row.querySelector('[data-staff-name]').value.trim();
+  const role = row.querySelector('[data-staff-role]').value;
+  const isActive = row.querySelector('[data-staff-active]').checked;
+
+  if (!displayName) {
+    rowMsg.textContent = 'اكتب اسم الموظف.';
+    return;
+  }
+
+  button.disabled = true;
+  rowMsg.textContent = 'جارٍ الحفظ...';
+
+  try {
+    const { data, error } = await supabaseClient.rpc(
+      'manager_set_staff_profile',
+      {
+        p_user_id: userId,
+        p_display_name: displayName,
+        p_role: role,
+        p_is_active: isActive
+      }
+    );
+
+    if (error) throw error;
+    if (data?.success === false) {
+      throw new Error(data.message || 'لم يتم حفظ التغييرات.');
+    }
+
+    rowMsg.textContent = 'تم الحفظ بنجاح.';
+    await loadDeliveryAssignments();
+  } catch (err) {
+    rowMsg.textContent = 'تعذر الحفظ: ' +
+      (err.message || 'خطأ غير معروف');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('refreshStaff')?.addEventListener('click', loadStaffManagement);
+
+$('staffManagementBody')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-save-staff]');
+  if (!button) return;
+
+  const row = button.closest('[data-staff-row]');
+  if (row) saveStaffProfile(row);
+});
 
 window.saveOrder=async id=>{const status=document.querySelector(`[data-order-status="${id}"]`)?.value;const payment_status=document.querySelector(`[data-payment-status="${id}"]`)?.value;const {error}=await supabaseClient.from('orders').update({status,payment_status}).eq('id',id);if(error){$('ordersMsg').textContent='تعذر تحديث الطلب: '+error.message;return}$('ordersMsg').textContent='تم تحديث الطلب.';};
 function renderStaffProductQuantities(){const root=$('staffProductQuantities');if(!root)return;const available=products.filter(p=>p.is_available&&p.price!==null);root.innerHTML=available.map(p=>`<div><label>${esc(p.name_ar)} — ${fmtMoney(p.price)}<input type="number" min="0" max="100" step="1" value="0" data-staff-product="${p.id}" aria-label="كمية ${esc(p.name_ar)}"></label></div>`).join('')||'<p class="muted">لا توجد أصناف متاحة بأسعار محددة.</p>';}
 $('staffOrderForm').addEventListener('submit',async e=>{e.preventDefault();const msg=$('staffOrderMsg');const items=[...document.querySelectorAll('[data-staff-product]')].map(el=>({product_id:el.dataset.staffProduct,quantity:Number(el.value)})).filter(x=>Number.isInteger(x.quantity)&&x.quantity>0);if(!$('staffTable').value){msg.textContent='اختر رقم الطاولة.';return;}if(!items.length){msg.textContent='حدد كمية صنف واحد على الأقل.';return;}const btn=$('staffSubmit');btn.disabled=true;msg.textContent='جارٍ حفظ الطلب…';try{const {data,error}=await supabaseClient.rpc('create_customer_order_v2',{p_customer_name:$('staffCustomer').value.trim()||null,p_customer_phone:$('staffPhone').value.trim()||null,p_delivery_address:null,p_delivery_zone_id:null,p_payment_method:$('staffPayment').value,p_items:items,p_customer_notes:$('staffNotes').value.trim()||null,p_language:'ar',p_payment_reference:null,p_order_type:'dine_in',p_table_token:null,p_table_number:Number($('staffTable').value),p_staff_order:true});if(error)throw error;msg.textContent=`تم حفظ الطلب رقم #${data.order_number} — طاولة ${data.table_number} — الإجمالي ${fmtMoney(data.total)}.`;document.querySelectorAll('[data-staff-product]').forEach(el=>el.value='0');$('staffCustomer').value='';$('staffPhone').value='';$('staffNotes').value='';await loadOrders();}catch(err){msg.textContent='تعذر حفظ الطلب: '+(err.message||'خطأ غير معروف');}finally{btn.disabled=false;}});
 $('reloadOrders').onclick=loadOrders;
-$('logout').onclick=async()=>{await supabaseClient.auth.signOut();location.href='./login.html'};init().then(()=>Promise.all([loadOrders(),loadDeliveryAssignments()]));
+$('logout').onclick=async()=>{await supabaseClient.auth.signOut();location.href='./login.html'};init().then(()=>Promise.all([
+  loadOrders(),
+  loadDeliveryAssignments(),
+  loadStaffManagement()
+]));
 </script></body></html>
