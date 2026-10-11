@@ -270,7 +270,20 @@ function actionButtons(order) {
         طلب موافقة لإلغاء
       </button>
     `);
-
+// إسناد مندوب التوصيل للكاشير والطلبات
+if (
+  ["cashier", "orders"].includes(currentRole) &&
+  order.order_type === "delivery" &&
+  ["confirmed","preparing"].includes(order.status)
+) {
+  buttons.push(`
+    <button 
+      class="staff-button secondary"
+      data-assign-driver="${order.id}">
+      🚚 إسناد مندوب التوصيل
+    </button>
+  `);
+}
   if (
   ["cashier", "orders"].includes(currentRole) &&
   order.order_type === "delivery" &&
@@ -595,6 +608,72 @@ async function loadCashierZones() {
 
   updateCashierTotal();
 }
+  async function assignDriver(orderId) {
+
+  const { data: drivers, error } = await supabaseClient
+    .from("staff_profiles")
+    .select("user_id,display_name")
+    .eq("role", "delivery")
+    .eq("is_active", true);
+
+  if (error) throw error;
+
+
+  if (!drivers || drivers.length === 0) {
+    showMessage(
+      "لا يوجد مندوبو توصيل نشطون.",
+      true
+    );
+    return;
+  }
+
+
+  const options = drivers
+    .map((d,index)=>
+      `${index + 1} - ${d.display_name}`
+    )
+    .join("\n");
+
+
+  const choice = prompt(
+    "اختر مندوب التوصيل:\n\n" + options
+  );
+
+
+  const index = Number(choice)-1;
+
+  const driver = drivers[index];
+
+
+  if (!driver) {
+    showMessage(
+      "اختيار غير صحيح.",
+      true
+    );
+    return;
+  }
+
+
+  const { error:updateError } =
+    await supabaseClient
+    .from("orders")
+    .update({
+      assigned_driver_id: driver.user_id
+    })
+    .eq("id", orderId);
+
+
+  if (updateError)
+    throw updateError;
+
+
+  showMessage(
+    `تم إسناد الطلب إلى ${driver.display_name}`
+  );
+
+
+  await loadOrders();
+}
   async function boot() {
     try {
       await initClient();
@@ -618,6 +697,8 @@ async function loadCashierZones() {
         if (b.dataset.status) await updateStatus(b.dataset.id, b.dataset.status);
         if (b.dataset.payment) await recordPayment(b.dataset.id, b.dataset.payment);
         if (b.dataset.approval) await askApprovalForOrder(b.dataset.id);
+        if (b.dataset.assignDriver)
+  await assignDriver(b.dataset.assignDriver);
       });
       $("#staff-products")?.addEventListener("click", async e => {
         const b = e.target.closest("button[data-product]");
