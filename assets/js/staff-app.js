@@ -390,45 +390,52 @@ function actionButtons(order) {
   let cashierZones = [];
 
   function cashierFieldsVisibility() {
-    const type = $("#cashier-order-type")?.value;
-    $("#cashier-dinein-fields")?.classList.toggle("hidden", type !== "dine_in");
-    $("#cashier-delivery-fields")?.classList.toggle("hidden", type !== "delivery");
+async function loadCashierProducts() {
+  const target = $("#cashier-products");
+  if (!target) return;
+
+  const { data, error } = await supabaseClient
+    .from("products")
+    .select("id,name_ar,name_en,price,is_available,sort_order")
+    .eq("is_available", true)
+    .order("sort_order", { ascending: true })
+    .limit(300);
+
+  if (error) throw error;
+
+  cashierProducts = (data || [])
+    .filter(p => p.price !== null && Number(p.price) >= 0);
+
+  if (!cashierProducts.length) {
+    target.innerHTML =
+      `<div class="staff-empty">لا توجد أصناف متاحة بأسعار محددة.</div>`;
+    return;
   }
 
-    const { data, error } = await supabaseClient
-      .from("products")
-      .select("id,name_ar,name_en,price,is_available,sort_order")
-      .eq("is_available", true)
-      .order("sort_order", { ascending: true })
-      .limit(300);
+  target.innerHTML = cashierProducts.map(p => `
+    <div class="staff-meta" style="padding:10px;border-bottom:1px solid #eee">
+      <strong>${escapeHtml(p.name_ar || p.name_en || "صنف")}</strong>
+      — ${money(p.price)}
+      <label>الكمية</label>
+      <input type="number"
+        min="0"
+        max="100"
+        step="1"
+        value="0"
+        data-cashier-product="${p.id}"
+        class="staff-input">
+    </div>
+  `).join("");
 
-    if (error) throw error;
-
-    cashierProducts = (data || []).filter(p => p.price !== null && Number(p.price) >= 0);
-
-    if (!cashierProducts.length) {
-      target.innerHTML = `<div class="staff-empty">لا توجد أصناف متاحة بأسعار محددة.</div>`;
-      return;
-    }
-
-    target.innerHTML = cashierProducts.map(p => `
-      <div class="staff-meta" style="padding:10px;border-bottom:1px solid #eee">
-        <strong>${escapeHtml(p.name_ar || p.name_en || "صنف")}</strong>
-        — ${money(p.price)}
-        <label for="cashier-qty-${p.id}">الكمية</label>
-        <input id="cashier-qty-${p.id}" type="number" min="0" max="100" step="1"
-          value="0" data-cashier-product="${p.id}" class="staff-input">
-      </div>
-    `).join("");
-
-    target.querySelectorAll("[data-cashier-product]").forEach(input => {
+  target.querySelectorAll("[data-cashier-product]")
+    .forEach(input => {
       input.addEventListener("input", updateCashierTotal);
     });
 
-    updateCashierTotal();
-  }
+  updateCashierTotal();
+}
 
-  async function loadCashierZones() {
+async function loadCashierZones() {
     const select = $("#cashier-zone");
     if (!select) return;
 
