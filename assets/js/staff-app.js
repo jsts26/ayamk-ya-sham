@@ -390,6 +390,11 @@ function actionButtons(order) {
   let cashierZones = [];
 
   function cashierFieldsVisibility() {
+  const type = $("#cashier-order-type")?.value;
+  $("#cashier-dinein-fields")?.classList.toggle("hidden", type !== "dine_in");
+  $("#cashier-delivery-fields")?.classList.toggle("hidden", type !== "delivery");
+}
+
 async function loadCashierProducts() {
   const target = $("#cashier-products");
   if (!target) return;
