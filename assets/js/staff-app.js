@@ -483,9 +483,7 @@ async function signIn(event) {
     await Promise.all([loadCashierProducts(), loadCashierZones()]);
     updateCashierTotal();
   }
-    let cashierProducts = [];
-  let cashierZones = [];
-
+    
   async function loadCashierProducts() {
     const target = $("#cashier-products");
     if (!target) return;
