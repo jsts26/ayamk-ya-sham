@@ -395,7 +395,6 @@ function actionButtons(order) {
     $("#cashier-delivery-fields")?.classList.toggle("hidden", type !== "delivery");
   }
 
-
     const { data, error } = await supabaseClient
       .from("products")
       .select("id,name_ar,name_en,price,is_available,sort_order")
