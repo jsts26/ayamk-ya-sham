@@ -176,26 +176,104 @@ async function signIn(event) {
       `<li>${escapeHtml(i.product_name_ar || i.product_name_en || "صنف")} × ${escapeHtml(i.quantity)} — ${money(i.line_total)}</li>`
     ).join("")}</ul>`;
   }
-  function actionButtons(order) {
-    const s = order.status;
-    const buttons = [];
-    if (currentRole === "orders" && s === "pending")
-      buttons.push(`<button class="staff-button" data-status="confirmed" data-id="${order.id}">تأكيد الطلب</button>`);
-    if (currentRole === "kitchen" && s === "confirmed")
-      buttons.push(`<button class="staff-button" data-status="preparing" data-id="${order.id}">بدء التحضير</button>`);
-    if (currentRole === "kitchen" && s === "preparing")
-      buttons.push(`<button class="staff-button secondary" data-status="confirmed" data-id="${order.id}">إرجاع إلى مؤكد</button>`);
-    if (currentRole === "delivery" && ["confirmed","preparing"].includes(s))
-      buttons.push(`<button class="staff-button" data-status="out_for_delivery" data-id="${order.id}">خرج للتوصيل</button>`);
-    if (currentRole === "delivery" && s === "out_for_delivery")
-      buttons.push(`<button class="staff-button" data-status="completed" data-id="${order.id}">تأكيد التسليم</button>`);
-    if (currentRole === "cashier" && ["cash_on_delivery","cash"].includes(order.payment_method) && ["pending","unpaid"].includes(order.payment_status))
-      buttons.push(`<button class="staff-button" data-payment="cash_collected" data-id="${order.id}">تسجيل استلام النقد</button>`);
-    if (currentRole === "cashier" && order.payment_method === "bank_transfer" && order.payment_status === "awaiting_transfer")
-      buttons.push(`<button class="staff-button" data-payment="transfer_received" data-id="${order.id}">استلام إشعار تحويل (للمراجعة)</button>`);
-    if (currentRole === "orders" && ["pending","confirmed"].includes(s))
-      buttons.push(`<button class="staff-button secondary" data-approval="cancel_order" data-id="${order.id}">طلب موافقة لإلغاء</button>`);
-    return buttons.length ? `<div class="staff-actions">${buttons.join("")}</div>` : "";
+function actionButtons(order) {
+  const s = order.status;
+  const buttons = [];
+
+  // الطلبات: تأكيد الطلب
+  if (["orders", "cashier"].includes(currentRole) && s === "pending")
+    buttons.push(`
+      <button class="staff-button"
+        data-status="confirmed"
+        data-id="${order.id}">
+        تأكيد الطلب
+      </button>
+    `);
+
+  // المطبخ والكاشير: إرسال للمطبخ
+  if (["kitchen", "cashier"].includes(currentRole) && s === "confirmed")
+    buttons.push(`
+      <button class="staff-button"
+        data-status="preparing"
+        data-id="${order.id}">
+        بدء التحضير
+      </button>
+    `);
+
+  // فقط المطبخ يبقى لديه إرجاع الطلب
+  if (currentRole === "kitchen" && s === "preparing")
+    buttons.push(`
+      <button class="staff-button secondary"
+        data-status="confirmed"
+        data-id="${order.id}">
+        إرجاع إلى مؤكد
+      </button>
+    `);
+
+  // التوصيل كما هو
+  if (currentRole === "delivery" && ["confirmed","preparing"].includes(s))
+    buttons.push(`
+      <button class="staff-button"
+        data-status="out_for_delivery"
+        data-id="${order.id}">
+        خرج للتوصيل
+      </button>
+    `);
+
+  if (currentRole === "delivery" && s === "out_for_delivery")
+    buttons.push(`
+      <button class="staff-button"
+        data-status="completed"
+        data-id="${order.id}">
+        تأكيد التسليم
+      </button>
+    `);
+
+  // الكاشير: الدفع
+  if (currentRole === "cashier" &&
+      ["cash_on_delivery","cash"].includes(order.payment_method) &&
+      ["pending","unpaid"].includes(order.payment_status))
+    buttons.push(`
+      <button class="staff-button"
+        data-payment="cash_collected"
+        data-id="${order.id}">
+        تسجيل استلام النقد
+      </button>
+    `);
+
+  if (currentRole === "cashier" &&
+      order.payment_method === "bank_transfer" &&
+      order.payment_status === "awaiting_transfer")
+    buttons.push(`
+      <button class="staff-button"
+        data-payment="transfer_received"
+        data-id="${order.id}">
+        استلام إشعار تحويل (للمراجعة)
+      </button>
+    `);
+
+  // طباعة تذكرة المطبخ للكاشير والمدير لاحقًا
+  if (["cashier"].includes(currentRole))
+    buttons.push(`
+      <button class="staff-button secondary"
+        onclick="printKitchenTicket('${order.id}')">
+        🍳 تذكرة المطبخ
+      </button>
+    `);
+
+  // طلب الإلغاء يبقى للطلبات فقط
+  if (currentRole === "orders" && ["pending","confirmed"].includes(s))
+    buttons.push(`
+      <button class="staff-button secondary"
+        data-approval="cancel_order"
+        data-id="${order.id}">
+        طلب موافقة لإلغاء
+      </button>
+    `);
+
+  return buttons.length
+    ? `<div class="staff-actions">${buttons.join("")}</div>`
+    : "";
   }
   function renderOrders(orders) {
     const container = $("#staff-orders");
