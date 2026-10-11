@@ -307,6 +307,375 @@ async function signIn(event) {
       </tr>`).join("")}</tbody></table></div>`;
     } catch (err) { if (target) target.innerHTML = ""; showMessage(`تعذر تحميل المنتجات: ${err.message}`, true); }
   }
+  
+  let cashierProducts = [];
+  let cashierZones = [];
+
+  function cashierFieldsVisibility() {
+    const type = $("#cashier-order-type")?.value;
+    $("#cashier-dinein-fields")?.classList.toggle("hidden", type !== "dine_in");
+    $("#cashier-delivery-fields")?.classList.toggle("hidden", type !== "delivery");
+  }
+
+  async function loadCashierProducts() {
+    const target = $("#cashier-products");
+    if (!target) return;
+
+    target.innerHTML = `<div class="staff-empty">جارٍ تحميل الأصناف…</div>`;
+
+    const { data, error } = await supabaseClient
+      .from("products")
+      .select("id,name_ar,name_en,price,is_available,sort_order")
+      .eq("is_available", true)
+      .order("sort_order", { ascending: true })
+      .limit(300);
+
+    if (error) throw error;
+
+    cashierProducts = (data || []).filter(p => p.price !== null && Number(p.price) >= 0);
+
+    if (!cashierProducts.length) {
+      target.innerHTML = `<div class="staff-empty">لا توجد أصناف متاحة بأسعار محددة.</div>`;
+      return;
+    }
+
+    target.innerHTML = cashierProducts.map(p => `
+      <div class="staff-meta" style="padding:10px;border-bottom:1px solid #eee">
+        <strong>${escapeHtml(p.name_ar || p.name_en || "صنف")}</strong>
+        — ${money(p.price)}
+        <label for="cashier-qty-${p.id}">الكمية</label>
+        <input id="cashier-qty-${p.id}" type="number" min="0" max="100" step="1"
+          value="0" data-cashier-product="${p.id}" class="staff-input">
+      </div>
+    `).join("");
+
+    target.querySelectorAll("[data-cashier-product]").forEach(input => {
+      input.addEventListener("input", updateCashierTotal);
+    });
+
+    updateCashierTotal();
+  }
+
+  async function loadCashierZones() {
+    const select = $("#cashier-zone");
+    if (!select) return;
+
+    const { data, error } = await supabaseClient
+      .from("delivery_zones")
+      .select("id,name_ar,delivery_fee,currency")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+
+    cashierZones = data || [];
+    select.innerHTML = `<option value="">اختر منطقة التوصيل</option>` +
+      cashierZones.map(z => `
+        <option value="${z.id}">
+          ${escapeHtml(z.name_ar)} — ${money(z.delivery_fee)}
+        </option>
+      `).join("");
+  }
+
+  function updateCashierTotal() {
+    const total = cashierProducts.reduce((sum, p) => {
+      const input = document.querySelector(`[data-cashier-product="${p.id}"]`);
+      const qty = Number(input?.value || 0);
+      return sum + (Number.isInteger(qty) && qty > 0 && qty <= 100
+        ? Number(p.price) * qty : 0);
+    }, 0);
+
+    const zone = cashierZones.find(z => z.id === $("#cashier-zone")?.value);
+    const deliveryFee = $("#cashier-order-type")?.value === "delivery"
+      ? Number(zone?.delivery_fee || 0) : 0;
+
+    const output = $("#cashier-order-total");
+    if (output) {
+      output.textContent = `المجموع التقريبي: ${money(total + deliveryFee)}`;
+    }
+  }
+
+  async function createCashierOrder() {
+    const msg = $("#cashier-order-message");
+    const btn = $("#cashier-create-order");
+    const type = $("#cashier-order-type")?.value;
+    const payment = $("#cashier-payment")?.value;
+
+    const items = cashierProducts.map(p => ({
+      product_id: p.id,
+      quantity: Number(document.querySelector(`[data-cashier-product="${p.id}"]`)?.value || 0)
+    })).filter(i => Number.isInteger(i.quantity) && i.quantity > 0 && i.quantity <= 100);
+
+    if (!items.length) {
+      msg.textContent = "اختر صنفًا واحدًا على الأقل وحدد كميته.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    const tableNumber = Number($("#cashier-table")?.value || 0);
+    const customerName = $("#cashier-customer")?.value.trim() || null;
+    const customerPhone = $("#cashier-phone")?.value.trim() || null;
+    const address = $("#cashier-address")?.value.trim() || null;
+    const zoneId = $("#cashier-zone")?.value || null;
+
+    if (type === "dine_in" && (!tableNumber || tableNumber < 1 || tableNumber > 10)) {
+      msg.textContent = "اختر رقم طاولة صحيحًا.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    if (type === "delivery" && (!customerName || !customerPhone || !address || !zoneId)) {
+      msg.textContent = "أدخل اسم العميل ورقم الهاتف والعنوان ومنطقة التوصيل.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    btn.disabled = true;
+    msg.classList.remove("hidden");
+    msg.textContent = "جارٍ إنشاء الطلب…";
+
+    try {
+      const { data, error } = await supabaseClient.rpc("create_customer_order_v2", {
+        p_customer_name: customerName,
+        p_customer_phone: customerPhone,
+        p_delivery_address: address,
+        p_delivery_zone_id: zoneId,
+        p_payment_method: payment,
+        p_items: items,
+        p_customer_notes: $("#cashier-notes")?.value.trim() || null,
+        p_language: "ar",
+        p_payment_reference: null,
+        p_order_type: type,
+        p_table_token: null,
+        p_table_number: type === "dine_in" ? tableNumber : null,
+        p_staff_order: true
+      });
+
+      if (error) throw error;
+
+      msg.textContent = `تم إنشاء الطلب رقم #${data.order_number} — الإجمالي ${money(data.total)}.`;
+      document.querySelectorAll("[data-cashier-product]").forEach(input => input.value = "0");
+      $("#cashier-customer").value = "";
+      $("#cashier-phone").value = "";
+      $("#cashier-address").value = "";
+      $("#cashier-notes").value = "";
+      await loadOrders();
+      updateCashierTotal();
+    } catch (err) {
+      msg.textContent = `تعذر إنشاء الطلب: ${err.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function initCashierOrderForm() {
+    if (!$("#cashier-create-order")) return;
+
+    $("#cashier-order-type").addEventListener("change", () => {
+      cashierFieldsVisibility();
+      updateCashierTotal();
+    });
+
+    $("#cashier-zone").addEventListener("change", updateCashierTotal);
+    $("#cashier-create-order").addEventListener("click", createCashierOrder);
+
+    cashierFieldsVisibility();
+    await Promise.all([loadCashierProducts(), loadCashierZones()]);
+    updateCashierTotal();
+  }
+    let cashierProducts = [];
+  let cashierZones = [];
+
+  async function loadCashierProducts() {
+    const target = $("#cashier-products");
+    if (!target) return;
+
+    const { data, error } = await supabaseClient
+      .from("products")
+      .select("id,name_ar,name_en,price,is_available,sort_order")
+      .eq("is_available", true)
+      .order("sort_order", { ascending: true })
+      .limit(300);
+
+    if (error) throw error;
+
+    cashierProducts = data || [];
+
+    target.innerHTML = cashierProducts.length
+      ? cashierProducts.map(p => `
+        <label class="cashier-product-row">
+          <span>${escapeHtml(p.name_ar || p.name_en || "منتج")}</span>
+          <span>${money(p.price)}</span>
+          <input type="number"
+            min="0" max="100" step="1" value="0"
+            data-cashier-product="${p.id}"
+            aria-label="الكمية">
+        </label>
+      `).join("")
+      : "<p>لا توجد منتجات متاحة.</p>";
+
+    target.addEventListener("input", updateCashierTotal);
+  }
+
+  async function loadCashierZones() {
+    const select = $("#cashier-zone");
+    if (!select) return;
+
+    const { data, error } = await supabaseClient
+      .from("delivery_zones")
+      .select("id,name_ar,name_en,delivery_fee")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+
+    cashierZones = data || [];
+
+    select.innerHTML =
+      '<option value="">اختر منطقة التوصيل</option>' +
+      cashierZones.map(z => `
+        <option value="${z.id}">
+          ${escapeHtml(z.name_ar || z.name_en || "منطقة")}
+          — ${money(z.delivery_fee)}
+        </option>
+      `).join("");
+  }
+
+  function updateCashierTotal() {
+    const total = cashierProducts.reduce((sum, p) => {
+      const input = document.querySelector(
+        `[data-cashier-product="${p.id}"]`
+      );
+      const qty = Math.max(
+        0,
+        Math.min(100, Number(input?.value || 0))
+      );
+      return sum + Number(p.price || 0) * qty;
+    }, 0);
+
+    const output = $("#cashier-order-total");
+    if (output) output.textContent = money(total);
+  }
+
+  function initCashierOrderForm() {
+    const type = $("#cashier-order-type");
+    const dineIn = $("#cashier-dinein-fields");
+    const delivery = $("#cashier-delivery-fields");
+    const button = $("#cashier-create-order");
+    const msg = $("#cashier-order-message");
+
+    if (!type || !button || !msg) return;
+
+    type.addEventListener("change", () => {
+      dineIn?.classList.toggle("hidden", type.value !== "dine_in");
+      delivery?.classList.toggle("hidden", type.value !== "delivery");
+    });
+
+    $("#cashier-payment")?.addEventListener("change", () => {
+      // تحديث الحقول حسب وسيلة الدفع عند الحاجة لاحقًا.
+    });
+
+    $("#cashier-products")?.addEventListener("input", updateCashierTotal);
+
+    button.addEventListener("click", async () => {
+      msg.textContent = "";
+      msg.classList.remove("error");
+
+      const items = cashierProducts
+        .map(p => {
+          const input = document.querySelector(
+            `[data-cashier-product="${p.id}"]`
+          );
+          return {
+            product_id: p.id,
+            quantity: Math.max(
+              0,
+              Math.min(100, Number(input?.value || 0))
+            )
+          };
+        })
+        .filter(item => item.quantity > 0);
+
+      if (!items.length) {
+        msg.textContent = "اختر منتجًا واحدًا على الأقل.";
+        msg.classList.add("error");
+        return;
+      }
+
+      const orderType = type.value;
+      const payment = $("#cashier-payment")?.value;
+      const customer = $("#cashier-customer")?.value.trim() || "";
+      const phone = $("#cashier-phone")?.value.trim() || "";
+      const address = $("#cashier-address")?.value.trim() || "";
+      const zoneId = $("#cashier-zone")?.value || null;
+      const tableNumber = Number($("#cashier-table")?.value || 0);
+      const notes = $("#cashier-notes")?.value.trim() || "";
+
+      if (!["dine_in", "delivery"].includes(orderType)) {
+        msg.textContent = "نوع الطلب غير صالح.";
+        msg.classList.add("error");
+        return;
+      }
+
+      if (orderType === "delivery" &&
+          (!customer || !phone || !address || !zoneId)) {
+        msg.textContent = "أدخل اسم العميل والهاتف والعنوان ومنطقة التوصيل.";
+        msg.classList.add("error");
+        return;
+      }
+
+      if (orderType === "dine_in" &&
+          (!Number.isInteger(tableNumber) ||
+           tableNumber < 1 || tableNumber > 10)) {
+        msg.textContent = "اختر رقم طاولة من 1 إلى 10.";
+        msg.classList.add("error");
+        return;
+      }
+
+      button.disabled = true;
+      msg.textContent = "جارٍ إنشاء الطلب…";
+
+      try {
+        const { data, error } = await supabaseClient.rpc(
+          "create_customer_order_v2",
+          {
+            p_customer_name: customer || null,
+            p_customer_phone: phone || null,
+            p_delivery_address: orderType === "delivery" ? address : null,
+            p_delivery_zone_id: orderType === "delivery" ? zoneId : null,
+            p_payment_method: payment,
+            p_items: items,
+            p_customer_notes: notes || null,
+            p_language: "ar",
+            p_payment_reference: null,
+            p_order_type: orderType,
+            p_table_token: null,
+            p_table_number: orderType === "dine_in" ? tableNumber : null,
+            p_staff_order: true
+          }
+        );
+
+        if (error) throw error;
+
+        msg.textContent = "تم إنشاء الطلب بنجاح.";
+        $("#cashier-customer").value = "";
+        $("#cashier-phone").value = "";
+        $("#cashier-address").value = "";
+        $("#cashier-notes").value = "";
+        $("#cashier-products")
+          ?.querySelectorAll('input[type="number"]')
+          .forEach(input => { input.value = "0"; });
+
+        updateCashierTotal();
+        await loadOrders();
+      } catch (err) {
+        msg.textContent = `تعذر إنشاء الطلب: ${err.message}`;
+        msg.classList.add("error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
   async function proposeProductChange(id, available, name) {
     const reason = prompt(`سبب طلب ${available ? "تفعيل" : "إيقاف"} المنتج «${name}»؟`);
     if (!reason?.trim()) return;
@@ -344,8 +713,22 @@ async function signIn(event) {
         const b = e.target.closest("button[data-product]");
         if (b) await proposeProductChange(b.dataset.product, b.dataset.available === "true", b.dataset.name);
       });
-      if (expectedRole === "menu") await loadProducts();
-      else await loadOrders();
+```javascript
+      if (expectedRole === "menu") {
+        await loadProducts();
+      } else {
+        await loadOrders();
+
+        if (expectedRole === "cashier") {
+          initCashierOrderForm();
+
+          await Promise.all([
+            loadCashierProducts(),
+            loadCashierZones()
+          ]);
+        }
+      }
+```
     } catch (err) {
       showMessage(err.message || "حدث خطأ غير متوقع.", true);
     }
