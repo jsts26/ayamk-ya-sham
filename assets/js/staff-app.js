@@ -655,12 +655,16 @@ async function loadCashierZones() {
     throw updateError;
 
 
-  showMessage(
-    `تم إسناد الطلب إلى ${driver.display_name}`
-  );
+  console.log("ASSIGN SUCCESS", {
+  orderId,
+  driver: driver.user_id
+});
 
+showMessage(
+  `تم إسناد الطلب إلى ${driver.display_name}`
+);
 
-  await loadOrders();
+await loadOrders();
 }
   async function boot() {
     try {
