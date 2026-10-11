@@ -711,27 +711,22 @@ async function signIn(event) {
         const b = e.target.closest("button[data-product]");
         if (b) await proposeProductChange(b.dataset.product, b.dataset.available === "true", b.dataset.name);
       });
-```javascript
       if (expectedRole === "menu") {
         await loadProducts();
       } else {
         await loadOrders();
 
         if (expectedRole === "cashier") {
-          initCashierOrderForm();
-
-          await Promise.all([
-            loadCashierProducts(),
-            loadCashierZones()
-          ]);
+          await initCashierOrderForm();
         }
       }
-```
-   } catch (err) {
-  console.error("BOOT ERROR:", err);
-  console.error("BOOT STACK:", err?.stack);
-  showMessage(err.message || "حدث خطأ غير متوقع.", true);
-}
+
+    } catch (err) {
+      console.error("BOOT ERROR:", err);
+      console.error("BOOT STACK:", err?.stack);
+      showMessage(err.message || "حدث خطأ غير متوقع.", true);
+    }
   }
+
   document.addEventListener("DOMContentLoaded", boot);
 })();
