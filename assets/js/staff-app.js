@@ -395,11 +395,6 @@ function actionButtons(order) {
     $("#cashier-delivery-fields")?.classList.toggle("hidden", type !== "delivery");
   }
 
-  async function loadCashierProducts() {
-    const target = $("#cashier-products");
-    if (!target) return;
-
-    target.innerHTML = `<div class="staff-empty">جارٍ تحميل الأصناف…</div>`;
 
     const { data, error } = await supabaseClient
       .from("products")
