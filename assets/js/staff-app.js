@@ -547,10 +547,11 @@ async function loadCashierZones() {
       updateCashierTotal();
     } catch (err) {
       msg.textContent = `تعذر إنشاء الطلب: ${err.message}`;
-    } finally {
+       } finally {
       btn.disabled = false;
     }
-  
+  }
+
   async function proposeProductChange(id, available, name) {
     const reason = prompt(`سبب طلب ${available ? "تفعيل" : "إيقاف"} المنتج «${name}»؟`);
     if (!reason?.trim()) return;
