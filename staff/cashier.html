@@ -22,6 +22,77 @@
     </div>
   </header>
   <section class="staff-card">
+ 
+<section class="staff-card">
+  <h1>إنشاء طلب جديد</h1>
+  <p class="staff-subtitle">أنشئ طلبًا داخل المطعم أو طلب توصيل للعميل.</p>
+
+  <div class="staff-toolbar">
+    <label for="cashier-order-type">نوع الطلب</label>
+    <select id="cashier-order-type" class="staff-select">
+      <option value="dine_in">داخل المطعم</option>
+      <option value="delivery">توصيل للعميل</option>
+    </select>
+  </div>
+
+  <div id="cashier-dinein-fields">
+    <label for="cashier-table">رقم الطاولة</label>
+    <select id="cashier-table" class="staff-select">
+      <option value="">اختر الطاولة</option>
+      <option value="1">طاولة 1</option>
+      <option value="2">طاولة 2</option>
+      <option value="3">طاولة 3</option>
+      <option value="4">طاولة 4</option>
+      <option value="5">طاولة 5</option>
+      <option value="6">طاولة 6</option>
+      <option value="7">طاولة 7</option>
+      <option value="8">طاولة 8</option>
+      <option value="9">طاولة 9</option>
+      <option value="10">طاولة 10</option>
+    </select>
+  </div>
+
+  <div id="cashier-delivery-fields" class="hidden">
+    <label for="cashier-customer">اسم العميل</label>
+    <input id="cashier-customer" class="staff-input" type="text">
+
+    <label for="cashier-phone">رقم الهاتف</label>
+    <input id="cashier-phone" class="staff-input" type="tel">
+
+    <label for="cashier-address">عنوان التوصيل</label>
+    <textarea id="cashier-address" class="staff-input"></textarea>
+
+    <label for="cashier-zone">منطقة التوصيل</label>
+    <select id="cashier-zone" class="staff-select">
+      <option value="">جارٍ تحميل المناطق…</option>
+    </select>
+  </div>
+
+  <label for="cashier-payment">طريقة الدفع</label>
+  <select id="cashier-payment" class="staff-select">
+    <option value="cash_on_delivery">نقدًا</option>
+    <option value="bank_transfer">تحويل بنكي</option>
+  </select>
+
+  <label for="cashier-notes">ملاحظات الطلب</label>
+  <textarea id="cashier-notes" class="staff-input"></textarea>
+
+  <h2>الأصناف والكميات</h2>
+  <div id="cashier-products">
+    <div class="staff-empty">سيتم تحميل الأصناف هنا.</div>
+  </div>
+
+  <div id="cashier-order-total" class="staff-meta"></div>
+
+  <div class="staff-actions">
+    <button id="cashier-create-order" class="staff-button" type="button">
+      إنشاء الطلب
+    </button>
+  </div>
+
+  <div id="cashier-order-message" class="staff-message hidden"
+       role="status" aria-live="polite"></div>
+</section>
     <h1>المدفوعات</h1><p class="staff-subtitle">استلام إشعار التحويل يحوّله إلى المراجعة ولا يؤكد أنه مدفوع.</p>
     <div id="staff-message" class="staff-message hidden" role="status" aria-live="polite"></div>
     <div class="staff-toolbar">
