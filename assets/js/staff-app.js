@@ -279,20 +279,8 @@ if (
   buttons.push(`
     <button 
       class="staff-button secondary"
-      data-assign-driver="${order.id}">
-      🚚 إسناد مندوب التوصيل
-    </button>
-  `);
-}
-  if (
-  ["cashier", "orders"].includes(currentRole) &&
-  order.order_type === "delivery" &&
-  ["confirmed","preparing"].includes(order.status)
-) {
-  buttons.push(`
-    <button class="staff-button secondary"
-      data-assign-driver="${order.id}">
-      إسناد مندوب التوصيل
+          data-assign-driver="${order.id}">
+       🚚  إسناد مندوب التوصيل
     </button>
   `);
 }
