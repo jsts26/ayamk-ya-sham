@@ -556,37 +556,6 @@ function actionButtons(order) {
     await Promise.all([loadCashierProducts(), loadCashierZones()]);
     updateCashierTotal();
   }
-    
-  async function loadCashierProducts() {
-    const target = $("#cashier-products");
-    if (!target) return;
-
-    const { data, error } = await supabaseClient
-      .from("products")
-      .select("id,name_ar,name_en,price,is_available,sort_order")
-      .eq("is_available", true)
-      .order("sort_order", { ascending: true })
-      .limit(300);
-
-    if (error) throw error;
-
-    cashierProducts = data || [];
-
-    target.innerHTML = cashierProducts.length
-      ? cashierProducts.map(p => `
-        <label class="cashier-product-row">
-          <span>${escapeHtml(p.name_ar || p.name_en || "منتج")}</span>
-          <span>${money(p.price)}</span>
-          <input type="number"
-            min="0" max="100" step="1" value="0"
-            data-cashier-product="${p.id}"
-            aria-label="الكمية">
-        </label>
-      `).join("")
-      : "<p>لا توجد منتجات متاحة.</p>";
-
-    target.addEventListener("input", updateCashierTotal);
-  }
 
   async function loadCashierZones() {
     const select = $("#cashier-zone");
