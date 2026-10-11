@@ -561,6 +561,28 @@ async function loadCashierZones() {
     } catch (err) { showMessage(`تعذر إرسال طلب الموافقة: ${err.message}`, true); }
   }
 
+  async function initCashierOrderForm() {
+  if (!$("#cashier-create-order")) return;
+
+  $("#cashier-order-type")?.addEventListener("change", () => {
+    cashierFieldsVisibility();
+    updateCashierTotal();
+  });
+
+  $("#cashier-zone")?.addEventListener("change", updateCashierTotal);
+
+  $("#cashier-create-order")
+    ?.addEventListener("click", createCashierOrder);
+
+  cashierFieldsVisibility();
+
+  await Promise.all([
+    loadCashierProducts(),
+    loadCashierZones()
+  ]);
+
+  updateCashierTotal();
+}
   async function boot() {
     try {
       await initClient();
