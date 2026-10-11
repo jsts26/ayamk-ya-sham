@@ -727,9 +727,11 @@ async function signIn(event) {
         }
       }
 ```
-    } catch (err) {
-      showMessage(err.message || "حدث خطأ غير متوقع.", true);
-    }
+   } catch (err) {
+  console.error("BOOT ERROR:", err);
+  console.error("BOOT STACK:", err?.stack);
+  showMessage(err.message || "حدث خطأ غير متوقع.", true);
+}
   }
   document.addEventListener("DOMContentLoaded", boot);
 })();
